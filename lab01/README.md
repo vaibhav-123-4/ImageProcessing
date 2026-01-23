@@ -14,13 +14,17 @@ A Python application for image encoding and decoding with customizable spatial a
 
 ```
 ImageProcessing/
-├── encoder.py           # Image encoding module
-├── decoder.py           # Image decoding module
-├── demo.py              # Complete demo pipeline
-├── image.png            # Sample input image
-├── encoded_image.bin    # Encoded binary output
-├── requirements.txt     # Python dependencies
-└── README.md            # This file
+└── lab01/
+    ├── encoder.py           # Image encoding module
+    ├── decoder.py           # Image decoding module
+    ├── demo.py              # Complete demo pipeline
+    ├── input.jpg            # Sample input image
+    ├── encoded.bin          # Encoded binary output
+    ├── encoded_image.bin    # Encoded binary output
+    ├── requirements.txt     # Python dependencies
+    ├── results/             # Output folder
+    │   └── reconstructed.png
+    └── README.md            # This file
 ```
 
 ## Requirements
