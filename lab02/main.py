@@ -238,11 +238,17 @@ def main():
         print(f"Output image size: {new_width} x {new_height} pixels")
         
         # Create result directory if it doesn't exist
-        if not os.path.exists("lab02/result"):
+        if not os.path.exists("result"):
             os.makedirs("result")
         
         # Output file
-        output_file = "lab02/result/output.bmp"
+        output_file = "result/output.bmp"
+        
+        # Remove previous output image if it exists
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            print(f"\nPrevious output image removed.")
+        
         print(f"\nWriting output image: {output_file}")
         write_bmp(output_file, new_width, new_height, output)
         
