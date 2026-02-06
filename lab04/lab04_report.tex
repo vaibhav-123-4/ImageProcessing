@@ -1,0 +1,474 @@
+\documentclass[journal]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{cite}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\lstset{
+    language=Python,
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    showstringspaces=false
+}
+
+\title{Two-Dimensional Discrete Fourier Transform: \\
+Implementation and Analysis without FFT}
+
+\author{
+Vaibhav Sharma (202351154), Devyash Saini (202351030) \\
+\textit{Indian Institute of Information Technology, Vadodara (IIITV)} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents a comprehensive implementation of the Two-Dimensional Discrete Fourier Transform (2-D DFT) from first principles without using ready-made Fast Fourier Transform (FFT) libraries. The work demonstrates four fundamental aspects: (1) generation and visualization of an 8×8 2-D DFT basis as a 64×64 image grid, (2) creation of binary test images containing rectangular regions with user-defined parameters, (3) computation and visualization of 2-D DFT magnitude and phase spectra, and (4) analysis of frequency domain characteristics through image centering using the $(-1)^{x+y}$ transformation. The implementation validates theoretical DFT principles and illustrates the relationship between spatial and frequency domain representations. Results demonstrate the computational feasibility of direct DFT calculation and its effectiveness in analyzing image frequency content.
+\end{abstract}
+
+\section{Introduction}
+
+The Discrete Fourier Transform (DFT) is a fundamental tool in digital image processing, providing a mathematical framework for analyzing images in the frequency domain. While Fast Fourier Transform (FFT) algorithms are commonly used for computational efficiency, understanding the underlying DFT formulation is essential for grasping frequency analysis concepts.
+
+This laboratory work implements the 2-D DFT using direct computation based on the mathematical definition, deliberately avoiding optimized FFT implementations to reinforce fundamental understanding. The system explores DFT basis functions, applies transformation to synthetic binary images, and demonstrates the effect of spatial domain operations on frequency spectra.
+
+\subsection{Objectives}
+
+The primary objectives of this work are:
+\begin{itemize}
+    \item Generate and visualize the complete basis set of an 8×8 2-D DFT
+    \item Implement 2-D DFT computation without using ready-made FFT functions
+    \item Analyze frequency domain characteristics of rectangular binary images
+    \item Demonstrate frequency spectrum shifting through image centering
+\end{itemize}
+
+\section{Theoretical Background}
+
+\subsection{Two-Dimensional DFT}
+
+The 2-D DFT transforms a spatial domain image $f(x,y)$ of size $M \times N$ into its frequency domain representation $F(u,v)$:
+
+\begin{equation}
+F(u,v) = \sum_{x=0}^{M-1} \sum_{y=0}^{N-1} f(x,y) \cdot e^{-j2\pi\left(\frac{ux}{M} + \frac{vy}{N}\right)}
+\label{eq:dft}
+\end{equation}
+
+where $u = 0, 1, \ldots, M-1$ and $v = 0, 1, \ldots, N-1$ represent frequency indices.
+
+Using Euler's formula:
+\begin{equation}
+e^{-j\theta} = \cos(\theta) - j\sin(\theta)
+\end{equation}
+
+The DFT can be expressed as:
+\begin{equation}
+F(u,v) = \sum_{x=0}^{M-1} \sum_{y=0}^{N-1} f(x,y) \left[\cos\left(\theta_{ux,vy}\right) - j\sin\left(\theta_{ux,vy}\right)\right]
+\label{eq:dft_euler}
+\end{equation}
+
+where:
+\begin{equation}
+\theta_{ux,vy} = 2\pi\left(\frac{ux}{M} + \frac{vy}{N}\right)
+\end{equation}
+
+\subsection{DFT Basis Functions}
+
+The 2-D DFT can be viewed as a decomposition of the input image into a weighted sum of basis functions. Each basis function $\phi_{u,v}(x,y)$ corresponds to a specific frequency $(u,v)$:
+
+\begin{equation}
+\phi_{u,v}(x,y) = e^{-j2\pi\left(\frac{ux}{M} + \frac{vy}{N}\right)}
+\label{eq:basis}
+\end{equation}
+
+For an $N \times N$ image, there are $N^2$ basis functions forming a complete orthogonal basis.
+
+\subsection{Magnitude and Phase Spectra}
+
+The DFT result is complex-valued and can be represented in polar form:
+
+\begin{align}
+\text{Magnitude:} \quad |F(u,v)| &= \sqrt{\text{Re}^2[F(u,v)] + \text{Im}^2[F(u,v)]} \\
+\text{Phase:} \quad \angle F(u,v) &= \arctan\left(\frac{\text{Im}[F(u,v)]}{\text{Re}[F(u,v)]}\right)
+\end{align}
+
+\subsection{Image Centering}
+
+Multiplying an image by $(-1)^{x+y}$ in the spatial domain shifts the origin of the DFT to the center of the frequency plane:
+
+\begin{equation}
+f_c(x,y) = f(x,y) \cdot (-1)^{x+y}
+\label{eq:centering}
+\end{equation}
+
+This transformation moves the DC component (zero frequency) from the corners to the center, facilitating frequency analysis.
+
+\section{Methodology}
+
+\subsection{Task 1: DFT Basis Generation}
+
+\subsubsection{Algorithm}
+
+\begin{algorithm}[H]
+\caption{Generate 2-D DFT Basis Functions}
+\begin{algorithmic}[1]
+\Require DFT size $N$ (default: 8)
+\Ensure Basis function arrays (real and imaginary parts)
+\State Initialize arrays: $B_{\text{real}}[N^2][N][N]$, $B_{\text{imag}}[N^2][N][N]$
+\State $\text{idx} \gets 0$
+\For{$u = 0$ to $N-1$}
+    \For{$v = 0$ to $N-1$}
+        \For{$x = 0$ to $N-1$}
+            \For{$y = 0$ to $N-1$}
+                \State $\theta \gets -2\pi \left(\frac{ux}{N} + \frac{vy}{N}\right)$
+                \State $B_{\text{real}}[\text{idx}][x][y] \gets \cos(\theta)$
+                \State $B_{\text{imag}}[\text{idx}][x][y] \gets \sin(\theta)$
+            \EndFor
+        \EndFor
+        \State $\text{idx} \gets \text{idx} + 1$
+    \EndFor
+\EndFor
+\State \Return $B_{\text{real}}, B_{\text{imag}}$
+\end{algorithmic}
+\end{algorithm}
+
+The magnitude of each basis function is computed and arranged in an 8×8 grid, producing a 64×64 visualization image.
+
+\subsubsection{Implementation}
+
+\begin{lstlisting}[language=Python]
+def generate_dft_basis_2d(N=8):
+    basis_real = np.zeros((N * N, N, N))
+    basis_imag = np.zeros((N * N, N, N))
+    
+    idx = 0
+    for u in range(N):
+        for v in range(N):
+            for x in range(N):
+                for y in range(N):
+                    angle = -2 * np.pi * ((u * x / N) + (v * y / N))
+                    basis_real[idx, x, y] = np.cos(angle)
+                    basis_imag[idx, x, y] = np.sin(angle)
+            idx += 1
+    
+    return basis_real, basis_imag
+\end{lstlisting}
+
+\subsection{Task 2: Binary Rectangle Image Creation}
+
+A 64×64 binary image is generated with a rectangular region set to 1 (white) and the background set to 0 (black). User inputs specify:
+\begin{itemize}
+    \item Top-left corner position $(r_{\text{top}}, c_{\text{left}})$
+    \item Rectangle dimensions: width $w$ and height $h$
+\end{itemize}
+
+Input validation ensures:
+\begin{align}
+0 &\leq r_{\text{top}}, c_{\text{left}} < 64 \\
+w, h &> 0 \\
+r_{\text{top}} + h &\leq 64 \\
+c_{\text{left}} + w &\leq 64
+\end{align}
+
+\subsection{Task 3: 2-D DFT Computation}
+
+\subsubsection{Algorithm}
+
+\begin{algorithm}[H]
+\caption{Compute 2-D DFT}
+\begin{algorithmic}[1]
+\Require Input image $f[M][N]$
+\Ensure DFT coefficients $F[M][N]$ (complex)
+\State Initialize $F[M][N] \gets 0 + 0j$
+\For{$u = 0$ to $M-1$}
+    \For{$v = 0$ to $N-1$}
+        \State $\text{sum} \gets 0 + 0j$
+        \For{$x = 0$ to $M-1$}
+            \For{$y = 0$ to $N-1$}
+                \State $\theta \gets -2\pi \left(\frac{ux}{M} + \frac{vy}{N}\right)$
+                \State $\text{sum} \gets \text{sum} + f[x][y] \cdot (\cos\theta + j\sin\theta)$
+            \EndFor
+        \EndFor
+        \State $F[u][v] \gets \text{sum}$
+    \EndFor
+\EndFor
+\State \Return $F$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Implementation}
+
+\begin{lstlisting}[language=Python]
+def dft_2d(image):
+    M, N = image.shape
+    dft_result = np.zeros((M, N), dtype=complex)
+    
+    for u in range(M):
+        for v in range(N):
+            sum_val = 0.0 + 0.0j
+            for x in range(M):
+                for y in range(N):
+                    angle = -2 * np.pi * ((u * x / M) + (v * y / N))
+                    sum_val += image[x, y] * (np.cos(angle) + 1j * np.sin(angle))
+            dft_result[u, v] = sum_val
+    
+    return dft_result
+\end{lstlisting}
+
+\subsection{Task 4: Centered Image DFT}
+
+The image centering transformation is applied:
+
+\begin{lstlisting}[language=Python]
+def center_image(image):
+    M, N = image.shape
+    centered_image = np.zeros((M, N))
+    
+    for x in range(M):
+        for y in range(N):
+            centered_image[x, y] = image[x, y] * ((-1) ** (x + y))
+    
+    return centered_image
+\end{lstlisting}
+
+The centered image undergoes 2-D DFT computation, and results are compared with the non-centered version.
+
+\section{Computational Complexity}
+
+The direct 2-D DFT implementation has computational complexity:
+\begin{equation}
+\mathcal{O}(M^2 N^2)
+\end{equation}
+
+For a 64×64 image:
+\begin{itemize}
+    \item Number of DFT coefficients: $64 \times 64 = 4{,}096$
+    \item Operations per coefficient: $64 \times 64 = 4{,}096$
+    \item Total operations: $\approx 16.8$ million
+\end{itemize}
+
+This demonstrates why FFT algorithms ($\mathcal{O}(N^2 \log N)$) are preferred for practical applications, though direct computation remains valuable for educational purposes.
+
+\section{Results and Discussion}
+
+\subsection{DFT Basis Visualization}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.45\textwidth]{Result/dft_basis.png}
+\caption{8×8 2-D DFT basis functions displayed as a 64×64 image. Each 8×8 block represents one basis function with increasing spatial frequencies from top-left to bottom-right.}
+\label{fig:basis}
+\end{figure}
+
+Figure \ref{fig:basis} displays all 64 basis functions of an 8×8 2-D DFT. Key observations:
+\begin{itemize}
+    \item The top-left block (0,0) represents the DC component (uniform intensity)
+    \item Horizontal frequency increases from left to right
+    \item Vertical frequency increases from top to bottom
+    \item Higher frequency basis functions exhibit more rapid oscillations
+\end{itemize}
+
+\subsection{Rectangle Image and DFT}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.3\textwidth}
+    \includegraphics[width=\textwidth]{Result/rectangle_image.png}
+    \caption{Binary rectangle}
+    \label{fig:rect}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.65\textwidth}
+    \includegraphics[width=\textwidth]{Result/rectangle_dft.png}
+    \caption{DFT analysis}
+    \label{fig:rect_dft}
+\end{subfigure}
+\caption{Binary rectangle image and its 2-D DFT magnitude/phase spectra.}
+\label{fig:rectangle}
+\end{figure}
+
+The rectangle image (Figure \ref{fig:rectangle}) demonstrates:
+\begin{itemize}
+    \item Strong DC component at corners (low frequency energy concentration)
+    \item Magnitude spectrum shows symmetric patterns along horizontal and vertical axes
+    \item Phase spectrum reveals directional information
+    \item Sharp edges in spatial domain create high-frequency components
+\end{itemize}
+
+\subsection{Centered Image Analysis}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.3\textwidth}
+    \includegraphics[width=\textwidth]{Result/centered_image.png}
+    \caption{Centered rectangle}
+    \label{fig:centered}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.65\textwidth}
+    \includegraphics[width=\textwidth]{Result/centered_dft.png}
+    \caption{DFT analysis}
+    \label{fig:centered_dft}
+\end{subfigure}
+\caption{Centered image (multiplied by $(-1)^{x+y}$) and its 2-D DFT spectra.}
+\label{fig:centered_analysis}
+\end{figure}
+
+The centering transformation (Figure \ref{fig:centered_analysis}) produces:
+\begin{itemize}
+    \item Checkerboard pattern in spatial domain due to $(-1)^{x+y}$ multiplication
+    \item DC component shifted to spectrum center in frequency domain
+    \item Symmetric distribution of frequency energy around center
+    \item Easier interpretation of low and high-frequency content
+\end{itemize}
+
+\subsection{Comparative Analysis}
+
+\begin{table}[h]
+\centering
+\caption{Comparison of Standard vs. Centered DFT}
+\label{tab:comparison}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Property} & \textbf{Standard DFT} & \textbf{Centered DFT} \\
+\hline
+DC location & Corners & Center \\
+Symmetry & 4-fold & Radial \\
+Low-freq region & Scattered & Concentrated \\
+Visualization & Less intuitive & More intuitive \\
+Computation & Same & Same \\
+\hline
+\end{tabular}
+\end{table}
+
+Table \ref{tab:comparison} summarizes key differences between standard and centered DFT representations.
+
+\subsection{Spectrum Characteristics}
+
+For the rectangular binary image:
+\begin{itemize}
+    \item \textbf{Magnitude spectrum}: Exhibits sinc-like patterns characteristic of rectangular functions in Fourier domain
+    \item \textbf{Phase spectrum}: Contains discontinuities corresponding to edge locations
+    \item \textbf{Symmetry}: Magnitude spectrum shows Hermitian symmetry due to real-valued input
+    \item \textbf{Energy distribution}: Majority of energy concentrated in low frequencies
+\end{itemize}
+
+\section{Validation}
+
+The implementation correctness is validated through:
+
+\begin{enumerate}
+    \item \textbf{Basis orthogonality}: Verification that basis functions form an orthogonal set
+    \item \textbf{Parseval's theorem}: Energy conservation between spatial and frequency domains:
+    \begin{equation}
+    \sum_{x=0}^{M-1} \sum_{y=0}^{N-1} |f(x,y)|^2 = \frac{1}{MN} \sum_{u=0}^{M-1} \sum_{v=0}^{N-1} |F(u,v)|^2
+    \end{equation}
+    \item \textbf{Symmetry properties}: Real-valued inputs produce conjugate-symmetric spectra
+    \item \textbf{DC component}: $F(0,0) = \sum_{x,y} f(x,y)$ equals sum of pixel values
+\end{enumerate}
+
+\section{Challenges and Solutions}
+
+\subsection{Computational Time}
+
+\textbf{Challenge}: Direct DFT computation for 64×64 images requires significant time (several seconds to minutes).
+
+\textbf{Solution}: 
+\begin{itemize}
+    \item Pre-compute trigonometric values
+    \item Use optimized NumPy array operations where possible
+    \item Provide progress feedback during computation
+\end{itemize}
+
+\subsection{Numerical Precision}
+
+\textbf{Challenge}: Floating-point arithmetic may introduce small errors.
+
+\textbf{Solution}: Use 64-bit floating-point (double precision) for intermediate calculations.
+
+\subsection{Visualization}
+
+\textbf{Challenge}: Large dynamic range in magnitude spectrum makes visualization difficult.
+
+\textbf{Solution}: Apply logarithmic scaling:
+\begin{equation}
+M_{\text{log}}(u,v) = \log(1 + |F(u,v)|)
+\end{equation}
+
+\section{Practical Applications}
+
+Understanding 2-D DFT fundamentals enables:
+\begin{itemize}
+    \item \textbf{Image filtering}: Design of frequency-selective filters
+    \item \textbf{Compression}: JPEG utilizes DCT (related to DFT)
+    \item \textbf{Pattern recognition}: Frequency domain features for classification
+    \item \textbf{Image enhancement}: Sharpening and noise reduction
+    \item \textbf{Motion analysis}: Velocity estimation through phase correlation
+\end{itemize}
+
+\section{Conclusion}
+
+This work successfully implemented a complete 2-D DFT system from first principles without using optimized FFT libraries. The implementation demonstrates:
+
+\begin{enumerate}
+    \item Generation and visualization of DFT basis functions providing insight into frequency decomposition
+    \item Direct computation of 2-D DFT for arbitrary images validating theoretical formulations
+    \item Analysis of frequency domain characteristics for binary rectangular images
+    \item Effect of spatial domain centering on frequency spectrum localization
+\end{enumerate}
+
+The results confirm that:
+\begin{itemize}
+    \item DFT effectively transforms spatial information into frequency components
+    \item Image edges and discontinuities create high-frequency content
+    \item Centering operation facilitates intuitive frequency analysis
+    \item Direct DFT computation, while slow, reinforces fundamental understanding
+\end{itemize}
+
+Future extensions could include:
+\begin{itemize}
+    \item Implementing separable 2-D DFT for improved efficiency
+    \item Applying frequency domain filtering operations
+    \item Comparing with FFT implementations for performance analysis
+    \item Extending to color images using multi-channel DFT
+\end{itemize}
+
+\section{Acknowledgment}
+
+The authors thank the faculty of IIIT Vadodara for guidance during this laboratory work. Complete source code, documentation, and results are publicly available at:
+
+\texttt{https://github.com/vaibhav-123-4/ImageProcessing}
+
+\begin{thebibliography}{9}
+
+\bibitem{gonzalez}
+R. C. Gonzalez and R. E. Woods, \textit{Digital Image Processing}, 4th ed. Pearson, 2018.
+
+\bibitem{oppenheim}
+A. V. Oppenheim and R. W. Schafer, \textit{Discrete-Time Signal Processing}, 3rd ed. Prentice Hall, 2009.
+
+\bibitem{jain}
+A. K. Jain, \textit{Fundamentals of Digital Image Processing}. Prentice Hall, 1989.
+
+\bibitem{bracewell}
+R. N. Bracewell, \textit{The Fourier Transform and Its Applications}, 3rd ed. McGraw-Hill, 2000.
+
+\bibitem{numpy}
+C. R. Harris et al., "Array programming with NumPy," \textit{Nature}, vol. 585, pp. 357–362, 2020.
+
+\bibitem{matplotlib}
+J. D. Hunter, "Matplotlib: A 2D graphics environment," \textit{Computing in Science \& Engineering}, vol. 9, no. 3, pp. 90–95, 2007.
+
+\end{thebibliography}
+
+\end{document}
