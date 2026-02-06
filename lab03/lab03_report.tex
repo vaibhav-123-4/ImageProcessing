@@ -1,0 +1,774 @@
+\documentclass[journal]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{cite}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\lstset{
+    language=Python,
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    showstringspaces=false
+}
+
+\title{Intensity Transformations, Histogram Processing, \\
+and Spatial Filtering in Digital Image Processing}
+
+\author{
+Vaibhav Sharma (202351154), Devyash Saini (202351030) \\
+\textit{Indian Institute of Information Technology, Vadodara (IIITV)} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents a comprehensive implementation of fundamental image enhancement techniques spanning intensity transformations, histogram processing, and spatial filtering. The work is organized into four parts: (1) intensity transformations including log transformation, power-law (gamma) correction, and bit-plane slicing, (2) manual implementation of global and local histogram equalization without using built-in functions, (3) spatial filtering operations including box filtering, Gaussian filtering, Laplacian sharpening, and unsharp masking, and (4) a mixed spatial enhancement pipeline combining Laplacian, Sobel gradient, and gamma correction. All techniques are applied to 28 standard test images from Gonzalez \& Woods' \textit{Digital Image Processing} (Chapter 3). Results demonstrate the effectiveness of each method in enhancing image contrast, revealing hidden details, and sharpening edges under diverse imaging conditions.
+\end{abstract}
+
+\section{Introduction}
+
+Image enhancement is one of the most fundamental and widely used areas of digital image processing. The goal is to process an image so that the result is more suitable than the original for a specific application. Enhancement techniques operate either in the spatial domain---directly manipulating pixel values---or in the frequency domain via transform-based methods.
+
+This laboratory work implements a suite of spatial domain enhancement techniques drawn from Chapter 3 of Gonzalez and Woods \cite{gonzalez}. The system is designed as a batch processing pipeline that automatically applies all transformations to every image in a specified input folder, producing a comprehensive set of enhanced outputs.
+
+\subsection{Objectives}
+
+The primary objectives of this work are:
+\begin{itemize}
+    \item Implement and analyze intensity transformation functions: log transform, gamma correction, and bit-plane slicing
+    \item Develop manual implementations of global and local histogram equalization without using built-in library functions
+    \item Apply spatial filtering operations including smoothing (box, Gaussian) and sharpening (Laplacian, unsharp mask)
+    \item Design a mixed enhancement pipeline combining multiple spatial operations
+    \item Process all 28 standard test images and analyze the results
+\end{itemize}
+
+\section{Theoretical Background}
+
+\subsection{Intensity Transformations}
+
+Intensity transformations operate on individual pixels using a mapping function $s = T(r)$, where $r$ is the input intensity and $s$ is the output intensity.
+
+\subsubsection{Log Transformation}
+
+The log transformation compresses the dynamic range of images with large variations in pixel values:
+
+\begin{equation}
+s = c \cdot \log(1 + r)
+\label{eq:log}
+\end{equation}
+
+where $c$ is a scaling constant chosen so that the maximum output value is 255. This transformation maps a narrow range of low-intensity values to a wider range, making dark regions more visible while compressing bright regions.
+
+\subsubsection{Power-Law (Gamma) Correction}
+
+Gamma correction adjusts image brightness and contrast through a power-law relationship:
+
+\begin{equation}
+s = c \cdot r^{\gamma}
+\label{eq:gamma}
+\end{equation}
+
+where $\gamma$ is the gamma parameter. The behavior depends on $\gamma$:
+\begin{itemize}
+    \item $\gamma < 1$: Brightens the image (expands dark intensities)
+    \item $\gamma = 1$: Identity transformation
+    \item $\gamma > 1$: Darkens the image (compresses dark intensities)
+\end{itemize}
+
+\subsubsection{Bit-Plane Slicing}
+
+An 8-bit grayscale image can be decomposed into eight binary images, one for each bit position:
+
+\begin{equation}
+b_k(x,y) = \left\lfloor \frac{f(x,y)}{2^k} \right\rfloor \bmod 2, \quad k = 0, 1, \ldots, 7
+\label{eq:bitplane}
+\end{equation}
+
+Higher-order bit planes (especially bits 7 and 6) contain the majority of visually significant information, while lower-order planes contribute subtle intensity details and noise.
+
+\subsection{Histogram Processing}
+
+\subsubsection{Global Histogram Equalization}
+
+Histogram equalization enhances contrast by redistributing intensity values to achieve a uniform histogram. The transformation is derived from the cumulative distribution function (CDF):
+
+\begin{equation}
+s_k = \text{round}\left(255 \cdot \text{CDF}(r_k)\right)
+\label{eq:histeq}
+\end{equation}
+
+where:
+\begin{align}
+\text{PDF}(r_k) &= \frac{n_k}{M \times N} \\
+\text{CDF}(r_k) &= \sum_{j=0}^{k} \text{PDF}(r_j)
+\end{align}
+
+Here $n_k$ is the number of pixels with intensity $r_k$, and $M \times N$ is the total number of pixels.
+
+\subsubsection{Local Histogram Equalization}
+
+Local (adaptive) histogram equalization applies the equalization process independently to a small neighborhood around each pixel. For a window of size $w \times w$:
+
+\begin{equation}
+s(x,y) = \text{round}\left(255 \cdot \text{CDF}_{W(x,y)}(f(x,y))\right)
+\label{eq:localhisteq}
+\end{equation}
+
+where $\text{CDF}_{W(x,y)}$ is the cumulative distribution function computed over the local window $W$ centered at pixel $(x,y)$. This approach is superior for images with spatially varying illumination or contrast.
+
+\subsection{Spatial Filtering}
+
+Spatial filtering involves a kernel (mask) that is applied to each pixel neighborhood via convolution:
+
+\begin{equation}
+g(x,y) = \sum_{s=-a}^{a} \sum_{t=-b}^{b} w(s,t) \cdot f(x+s, y+t)
+\label{eq:convolution}
+\end{equation}
+
+where $w$ is the filter kernel of size $(2a+1) \times (2b+1)$.
+
+\subsubsection{Box (Mean) Filter}
+
+The box filter replaces each pixel with the average of its neighborhood:
+
+\begin{equation}
+w_{\text{box}}(s,t) = \frac{1}{k^2}, \quad \forall\, s, t
+\label{eq:box}
+\end{equation}
+
+where $k$ is the kernel size. This produces uniform smoothing and noise reduction.
+
+\subsubsection{Gaussian Filter}
+
+The Gaussian filter uses a weighted kernel based on the Gaussian function:
+
+\begin{equation}
+w_{\text{gauss}}(s,t) = \frac{1}{2\pi\sigma^2} \, e^{-\frac{s^2 + t^2}{2\sigma^2}}
+\label{eq:gauss}
+\end{equation}
+
+where $\sigma$ is the standard deviation. Gaussian filtering provides better edge preservation than box filtering because nearby pixels receive higher weights.
+
+\subsubsection{Laplacian Sharpening}
+
+The Laplacian is a second-order derivative operator used for edge enhancement:
+
+\begin{equation}
+\nabla^2 f = \frac{\partial^2 f}{\partial x^2} + \frac{\partial^2 f}{\partial y^2}
+\label{eq:laplacian}
+\end{equation}
+
+Sharpening is achieved by adding the Laplacian to the original image:
+
+\begin{equation}
+g(x,y) = f(x,y) + c \cdot \nabla^2 f(x,y)
+\label{eq:lapsharp}
+\end{equation}
+
+where $c$ controls the sharpening strength.
+
+\subsubsection{Unsharp Masking}
+
+Unsharp masking enhances edges by adding a scaled version of the high-frequency content:
+
+\begin{equation}
+g(x,y) = f(x,y) + k \cdot \underbrace{\left(f(x,y) - f_{\text{blur}}(x,y)\right)}_{\text{unsharp mask}}
+\label{eq:unsharp}
+\end{equation}
+
+where $f_{\text{blur}}$ is a Gaussian-blurred version of the image and $k$ is the enhancement factor.
+
+\subsection{Mixed Spatial Enhancement}
+
+The mixed enhancement pipeline combines multiple operations to achieve comprehensive image improvement:
+
+\begin{equation}
+g(x,y) = T_\gamma\left[ f(x,y) + \nabla^2 f(x,y) + |\nabla f(x,y)| \right]
+\label{eq:mixed}
+\end{equation}
+
+where $\nabla^2 f$ is the Laplacian, $|\nabla f|$ is the Sobel gradient magnitude, and $T_\gamma$ is gamma correction with $\gamma = 0.8$.
+
+\section{Methodology}
+
+\subsection{Part 1: Intensity Transformations}
+
+\subsubsection{Log Transformation}
+
+\begin{algorithm}[H]
+\caption{Log Transformation}
+\begin{algorithmic}[1]
+\Require Grayscale image $f[M][N]$
+\Ensure Enhanced image $g[M][N]$
+\State Convert $f$ to floating-point: $r \gets f.\text{float32}$
+\State $s \gets \log(1 + r)$
+\State $s \gets 255 \times s \,/\, \max(s)$ \Comment{Normalize to $[0, 255]$}
+\State $g \gets \text{uint8}(s)$
+\State \Return $g$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{lstlisting}[language=Python]
+def log_transform(img):
+    r = img.astype(np.float32)
+    s = np.log(1 + r)
+    s = 255 * s / np.max(s)
+    return s.astype(np.uint8)
+\end{lstlisting}
+
+\subsubsection{Gamma Correction}
+
+\begin{algorithm}[H]
+\caption{Gamma Correction}
+\begin{algorithmic}[1]
+\Require Image $f[M][N]$, gamma value $\gamma$
+\Ensure Corrected image $g[M][N]$
+\State $r \gets f \,/\, 255.0$ \Comment{Normalize to $[0, 1]$}
+\State $s \gets r^{\gamma} \times 255$
+\State $g \gets \text{clip}(s, 0, 255)$
+\State \Return $g$
+\end{algorithmic}
+\end{algorithm}
+
+Six gamma values are applied to each image: $\gamma \in \{0.6, 0.4, 0.3, 3.0, 4.0, 5.0\}$.
+
+\begin{lstlisting}[language=Python]
+def gamma_correction(img, gamma):
+    r = img.astype(np.float32) / 255.0
+    s = np.power(r, gamma) * 255.0
+    return np.clip(s, 0, 255).astype(np.uint8)
+\end{lstlisting}
+
+\subsubsection{Bit-Plane Slicing}
+
+\begin{algorithm}[H]
+\caption{Bit-Plane Slicing}
+\begin{algorithmic}[1]
+\Require Image $f[M][N]$
+\Ensure List of 8 binary planes $P_0, P_1, \ldots, P_7$
+\For{$k = 0$ to $7$}
+    \State $P_k[x][y] \gets \left(\lfloor f[x][y] / 2^k \rfloor \bmod 2\right) \times 255$
+\EndFor
+\State \Return $\{P_0, P_1, \ldots, P_7\}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{lstlisting}[language=Python]
+def bit_planes(img):
+    planes = []
+    for k in range(8):
+        p = ((img >> k) & 1) * 255
+        planes.append(p.astype(np.uint8))
+    return planes
+\end{lstlisting}
+
+\subsection{Part 2: Histogram Processing}
+
+\subsubsection{Global Histogram Equalization}
+
+\begin{algorithm}[H]
+\caption{Global Histogram Equalization (Manual)}
+\begin{algorithmic}[1]
+\Require Grayscale image $f[M][N]$
+\Ensure Equalized image $g[M][N]$
+\State Initialize $\text{hist}[256] \gets 0$
+\For{$i = 0$ to $M-1$}
+    \For{$j = 0$ to $N-1$}
+        \State $\text{hist}[f[i][j]] \gets \text{hist}[f[i][j]] + 1$
+    \EndFor
+\EndFor
+\State $\text{PDF}[k] \gets \text{hist}[k] \,/\, (M \times N)$ for all $k$
+\State $\text{CDF}[0] \gets \text{PDF}[0]$
+\For{$k = 1$ to $255$}
+    \State $\text{CDF}[k] \gets \text{CDF}[k-1] + \text{PDF}[k]$
+\EndFor
+\For{$i = 0$ to $M-1$}
+    \For{$j = 0$ to $N-1$}
+        \State $g[i][j] \gets \text{round}(255 \times \text{CDF}[f[i][j]])$
+    \EndFor
+\EndFor
+\State \Return $g$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{lstlisting}[language=Python]
+def global_hist_eq(img):
+    M, N = img.shape
+    hist = np.zeros(256, dtype=int)
+    for i in range(M):
+        for j in range(N):
+            hist[img[i, j]] += 1
+    pdf = hist / (M * N)
+    cdf = np.zeros(256)
+    cdf[0] = pdf[0]
+    for i in range(1, 256):
+        cdf[i] = cdf[i - 1] + pdf[i]
+    out = np.zeros_like(img)
+    for i in range(M):
+        for j in range(N):
+            out[i, j] = round(255 * cdf[img[i, j]])
+    return out.astype(np.uint8)
+\end{lstlisting}
+
+\subsubsection{Local Histogram Equalization}
+
+\begin{algorithm}[H]
+\caption{Local Histogram Equalization ($3 \times 3$ Window)}
+\begin{algorithmic}[1]
+\Require Image $f[M][N]$
+\Ensure Enhanced image $g[M][N]$
+\State Pad $f$ with edge values $\to f_{\text{pad}}[M+2][N+2]$
+\For{$i = 0$ to $M-1$}
+    \For{$j = 0$ to $N-1$}
+        \State Extract $3 \times 3$ window $W$ from $f_{\text{pad}}$
+        \State Compute histogram, PDF, CDF over $W$ ($n = 9$ pixels)
+        \State $g[i][j] \gets \text{round}(255 \times \text{CDF}_W[f[i][j]])$
+    \EndFor
+\EndFor
+\State \Return $g$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{lstlisting}[language=Python]
+def local_hist_eq(img):
+    M, N = img.shape
+    out = np.zeros_like(img)
+    padded = np.pad(img, 1, mode='edge')
+    for i in range(M):
+        for j in range(N):
+            window = padded[i:i+3, j:j+3]
+            hist = np.zeros(256, dtype=int)
+            for x in range(3):
+                for y in range(3):
+                    hist[window[x, y]] += 1
+            pdf = hist / 9.0
+            cdf = np.zeros(256)
+            cdf[0] = pdf[0]
+            for k in range(1, 256):
+                cdf[k] = cdf[k - 1] + pdf[k]
+            out[i, j] = round(255 * cdf[img[i, j]])
+    return out.astype(np.uint8)
+\end{lstlisting}
+
+\subsection{Part 3: Spatial Filtering}
+
+\subsubsection{Box Filter}
+
+\begin{lstlisting}[language=Python]
+def box_filter(img, k):
+    kernel = np.ones((k, k), np.float32) / (k * k)
+    return cv2.filter2D(img, -1, kernel)
+\end{lstlisting}
+
+Applied with kernel sizes $k = 3$ and $k = 5$.
+
+\subsubsection{Gaussian Filter}
+
+\begin{lstlisting}[language=Python]
+def gaussian_filter(img, k, sigma):
+    return cv2.GaussianBlur(img, (k, k), sigma)
+\end{lstlisting}
+
+Applied with $k = 5$ and $\sigma = 1.0$.
+
+\subsubsection{Laplacian Sharpening}
+
+\begin{lstlisting}[language=Python]
+def laplacian_sharpen(img, c=1.0):
+    lap = cv2.Laplacian(img, cv2.CV_32F)
+    res = img.astype(np.float32) + c * lap
+    return np.clip(res, 0, 255).astype(np.uint8)
+\end{lstlisting}
+
+\subsubsection{Unsharp Masking}
+
+\begin{lstlisting}[language=Python]
+def unsharp_mask(img, k=1.5):
+    blur = cv2.GaussianBlur(img, (5, 5), 1.0)
+    mask = img.astype(np.float32) - blur.astype(np.float32)
+    res = img.astype(np.float32) + k * mask
+    return np.clip(res, 0, 255).astype(np.uint8)
+\end{lstlisting}
+
+\subsection{Part 4: Mixed Spatial Enhancement}
+
+\begin{algorithm}[H]
+\caption{Mixed Spatial Enhancement}
+\begin{algorithmic}[1]
+\Require Grayscale image $f[M][N]$
+\Ensure Enhanced image $g[M][N]$
+\State $L \gets \nabla^2 f$ \Comment{Laplacian}
+\State $G_x \gets \text{Sobel}_x(f)$, \; $G_y \gets \text{Sobel}_y(f)$
+\State $G \gets |G_x| + |G_y|$ \Comment{Gradient magnitude}
+\State $\text{temp} \gets f + L + G$ \Comment{Combine}
+\State $\text{temp} \gets \text{clip}(\text{temp}, 0, 255)$
+\State $g \gets T_\gamma(\text{temp}, \gamma = 0.8)$ \Comment{Gamma correction}
+\State \Return $g$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{lstlisting}[language=Python]
+def mixed_enhancement(img):
+    lap = cv2.Laplacian(img, cv2.CV_32F)
+    sx = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
+    sy = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
+    grad = np.abs(sx) + np.abs(sy)
+    temp = img.astype(np.float32) + lap + grad
+    temp = np.clip(temp, 0, 255).astype(np.uint8)
+    return gamma_correction(temp, 0.8)
+\end{lstlisting}
+
+\section{Batch Processing Pipeline}
+
+All 28 test images from the \textit{DIP3E\_Original\_Images\_CH03} dataset are processed automatically. For each image, the pipeline generates 20 output images:
+
+\begin{table}[h]
+\centering
+\caption{Output Files per Input Image}
+\label{tab:outputs}
+\begin{tabular}{|l|c|l|}
+\hline
+\textbf{Operation} & \textbf{Count} & \textbf{Suffix} \\
+\hline
+Log transform & 1 & \texttt{\_log} \\
+Gamma correction & 6 & \texttt{\_gamma\_\{$\gamma$\}} \\
+Bit-plane slicing & 8 & \texttt{\_bit\_\{0--7\}} \\
+Global histogram eq. & 1 & \texttt{\_hist\_eq} \\
+Local histogram eq. & 1 & \texttt{\_local\_hist\_eq} \\
+Box filter ($3 \times 3$) & 1 & \texttt{\_box3} \\
+Box filter ($5 \times 5$) & 1 & \texttt{\_box5} \\
+Gaussian filter & 1 & \texttt{\_gauss5} \\
+Laplacian sharpening & 1 & \texttt{\_laplacian} \\
+Unsharp masking & 1 & \texttt{\_unsharp} \\
+Mixed enhancement & 1 & \texttt{\_mixed} \\
+\hline
+\textbf{Total per image} & \textbf{23} & \\
+\hline
+\end{tabular}
+\end{table}
+
+Total output images: $28 \times 23 = 644$ images.
+
+\section{Results and Discussion}
+
+\subsection{Intensity Transformations}
+
+\subsubsection{Log Transformation}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_dft_log.png}
+    \caption{Log of DFT image}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_spine_log.png}
+    \caption{Log of spine image}
+\end{subfigure}
+\caption{Log transformation results. Dark regions are enhanced, revealing details invisible in the original.}
+\label{fig:log}
+\end{figure}
+
+The log transformation is particularly effective for images with a large dynamic range, such as the DFT spectrum image (Fig.~\ref{fig:log}). The transformation compresses bright values while expanding dark ones, revealing previously hidden low-intensity details.
+
+\subsubsection{Gamma Correction}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.15\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_aerial_gamma_0.3.png}
+    \caption{$\gamma = 0.3$}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.15\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_aerial_gamma_0.6.png}
+    \caption{$\gamma = 0.6$}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.15\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_aerial_gamma_3.0.png}
+    \caption{$\gamma = 3.0$}
+\end{subfigure}
+\caption{Gamma correction applied to washed-out aerial image. Lower $\gamma$ values brighten the image, higher values darken it.}
+\label{fig:gamma}
+\end{figure}
+
+Gamma correction with $\gamma < 1$ effectively recovers detail in dark, washed-out images (Fig.~\ref{fig:gamma}). Conversely, $\gamma > 1$ darkens the image, which is useful for reducing overexposure.
+
+\subsubsection{Bit-Plane Slicing}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.11\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_dollars_bit_0.png}
+    \caption{Bit 0}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.11\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_dollars_bit_3.png}
+    \caption{Bit 3}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.11\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_dollars_bit_5.png}
+    \caption{Bit 5}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.11\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_dollars_bit_7.png}
+    \caption{Bit 7}
+\end{subfigure}
+\caption{Selected bit planes of the 100-dollar bill image. Higher-order planes carry most structural information.}
+\label{fig:bitplane}
+\end{figure}
+
+Bit-plane analysis (Fig.~\ref{fig:bitplane}) reveals that:
+\begin{itemize}
+    \item Bit planes 7 and 6 (MSBs) capture the primary structural content of the image
+    \item Lower bit planes (0--3) appear increasingly noisy and contain fine texture details
+    \item This decomposition has applications in image compression and watermarking
+\end{itemize}
+
+\subsection{Histogram Processing}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_phobos_hist_eq.png}
+    \caption{Global hist. eq.}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_phobos_local_hist_eq.png}
+    \caption{Local hist. eq.}
+\end{subfigure}
+\caption{Histogram equalization of Mars moon Phobos image. Local equalization reveals more surface detail.}
+\label{fig:histeq}
+\end{figure}
+
+Key observations from histogram equalization results (Fig.~\ref{fig:histeq}):
+\begin{itemize}
+    \item \textbf{Global equalization}: Spreads the histogram uniformly across the full intensity range, improving overall contrast
+    \item \textbf{Local equalization}: Enhances local contrast by processing each $3 \times 3$ neighborhood independently, revealing fine details that global equalization may miss
+    \item Local equalization is particularly effective for images with non-uniform illumination, such as medical scans and astronomical images
+\end{itemize}
+
+\subsection{Spatial Filtering}
+
+\subsubsection{Smoothing Filters}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.15\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_cktboard_box3.png}
+    \caption{Box $3\!\times\!3$}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.15\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_cktboard_box5.png}
+    \caption{Box $5\!\times\!5$}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.15\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_cktboard_gauss5.png}
+    \caption{Gauss $5\!\times\!5$}
+\end{subfigure}
+\caption{Smoothing filter comparison on circuit board image with salt-and-pepper noise.}
+\label{fig:smooth}
+\end{figure}
+
+Smoothing filter comparison (Fig.~\ref{fig:smooth}):
+\begin{itemize}
+    \item Larger box filters ($5 \times 5$) provide stronger noise reduction but increased blurring
+    \item Gaussian filtering preserves edges better than box filtering due to its weighted kernel
+    \item Both reduce salt-and-pepper noise effectively, though median filtering would be more appropriate for impulse noise
+\end{itemize}
+
+\subsubsection{Sharpening Filters}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_moon_laplacian.png}
+    \caption{Laplacian sharpening}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_moon_unsharp.png}
+    \caption{Unsharp masking}
+\end{subfigure}
+\caption{Sharpening of the blurry moon image. Both methods enhance edge details.}
+\label{fig:sharp}
+\end{figure}
+
+Sharpening results (Fig.~\ref{fig:sharp}) demonstrate:
+\begin{itemize}
+    \item \textbf{Laplacian sharpening}: Directly enhances edges using second-order derivatives; can amplify noise
+    \item \textbf{Unsharp masking}: Provides more controlled sharpening with the enhancement factor $k = 1.5$; generally produces more visually pleasing results
+\end{itemize}
+
+\subsection{Mixed Enhancement}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_skeleton_mixed.png}
+    \caption{Skeleton}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.22\textwidth}
+    \includegraphics[width=\textwidth]{result/fig_einstein_mixed.png}
+    \caption{Einstein}
+\end{subfigure}
+\caption{Mixed enhancement combining Laplacian, Sobel gradient, and gamma correction.}
+\label{fig:mixed}
+\end{figure}
+
+The mixed enhancement pipeline (Fig.~\ref{fig:mixed}) produces comprehensive results:
+\begin{itemize}
+    \item Laplacian component enhances fine edges and details
+    \item Sobel gradient magnitude adds overall edge strength
+    \item Gamma correction ($\gamma = 0.8$) slightly brightens the result, improving visibility
+    \item The combination yields images with enhanced edges, improved contrast, and balanced intensity
+\end{itemize}
+
+\subsection{Comparative Analysis}
+
+\begin{table}[h]
+\centering
+\caption{Comparison of Enhancement Techniques}
+\label{tab:comparison}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Technique} & \textbf{Contrast} & \textbf{Edges} & \textbf{Noise} \\
+\hline
+Log transform & Improved & Neutral & Neutral \\
+Gamma ($\gamma < 1$) & Brightened & Neutral & May amplify \\
+Gamma ($\gamma > 1$) & Darkened & Neutral & Reduced \\
+Global hist. eq. & Improved & Neutral & May amplify \\
+Local hist. eq. & Improved & Enhanced & Amplified \\
+Box filter & Reduced & Blurred & Reduced \\
+Gaussian filter & Slightly reduced & Preserved & Reduced \\
+Laplacian & Neutral & Enhanced & Amplified \\
+Unsharp mask & Neutral & Enhanced & Slightly amplified \\
+Mixed & Improved & Enhanced & Slightly amplified \\
+\hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:comparison} summarizes the trade-offs among the implemented techniques. No single method is optimal for all images; the choice depends on the specific enhancement goal.
+
+\section{Computational Complexity}
+
+\begin{table}[h]
+\centering
+\caption{Computational Complexity of Implemented Methods}
+\label{tab:complexity}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Operation} & \textbf{Complexity} \\
+\hline
+Log/Gamma transform & $\mathcal{O}(MN)$ \\
+Bit-plane slicing & $\mathcal{O}(MN)$ \\
+Global histogram eq. & $\mathcal{O}(MN + L)$ \\
+Local histogram eq. ($w \times w$) & $\mathcal{O}(MN \cdot w^2)$ \\
+Box/Gaussian filter ($k \times k$) & $\mathcal{O}(MN \cdot k^2)$ \\
+Laplacian/Sobel & $\mathcal{O}(MN)$ \\
+Mixed enhancement & $\mathcal{O}(MN)$ \\
+\hline
+\end{tabular}
+\end{table}
+
+where $M \times N$ is the image size, $L = 256$ is the number of intensity levels, $w$ is the local window size, and $k$ is the filter kernel size. The local histogram equalization is the most computationally expensive operation due to its per-pixel histogram computation with nested loops.
+
+\section{Challenges and Solutions}
+
+\subsection{Manual Histogram Implementation}
+
+\textbf{Challenge}: Implementing histogram equalization without built-in functions requires careful handling of histogram computation, CDF calculation, and intensity mapping.
+
+\textbf{Solution}: Used explicit nested loops for histogram computation and cumulative summation, ensuring correctness at the cost of speed.
+
+\subsection{Border Handling in Local Operations}
+
+\textbf{Challenge}: Local histogram equalization requires neighborhood access at image boundaries.
+
+\textbf{Solution}: Applied edge-replication padding (\texttt{np.pad} with \texttt{mode='edge'}) to extend the image boundaries naturally.
+
+\subsection{Intensity Overflow}
+
+\textbf{Challenge}: Sharpening operations (Laplacian, unsharp mask, mixed) can produce values outside the valid $[0, 255]$ range.
+
+\textbf{Solution}: Performed computations in 32-bit floating-point and applied clipping before converting back to 8-bit unsigned integers.
+
+\subsection{Batch Processing Robustness}
+
+\textbf{Challenge}: Processing 28 diverse images with varying sizes and characteristics.
+
+\textbf{Solution}: Implemented input validation, graceful error handling for unreadable files, and progress reporting during batch processing.
+
+\section{Conclusion}
+
+This work successfully implemented and analyzed a comprehensive suite of image enhancement techniques covering intensity transformations, histogram processing, and spatial filtering. Key findings include:
+
+\begin{enumerate}
+    \item \textbf{Log transformation} is highly effective for compressing dynamic range and revealing details in dark image regions
+    \item \textbf{Gamma correction} provides flexible brightness and contrast control; $\gamma < 1$ is ideal for washed-out images while $\gamma > 1$ reduces overexposure
+    \item \textbf{Bit-plane slicing} demonstrates that most structural information resides in the higher-order bit planes (bits 6--7)
+    \item \textbf{Global histogram equalization} improves overall contrast but may over-enhance some regions
+    \item \textbf{Local histogram equalization} provides superior detail enhancement for images with spatially varying contrast, at higher computational cost
+    \item \textbf{Spatial smoothing} effectively reduces noise, with Gaussian filtering offering better edge preservation than box filtering
+    \item \textbf{Laplacian and unsharp masking} successfully sharpen edges, with unsharp masking providing more controlled enhancement
+    \item \textbf{Mixed enhancement} combines the strengths of multiple techniques for comprehensive image improvement
+\end{enumerate}
+
+The batch processing system successfully processed all 28 test images, generating 644 output images demonstrating the diverse effects of each technique. Future work could extend this system with:
+\begin{itemize}
+    \item Adaptive parameter selection based on image statistics
+    \item Median and bilateral filtering for improved noise handling
+    \item Quantitative evaluation metrics (PSNR, SSIM)
+    \item Color image processing extensions
+\end{itemize}
+
+\section{Acknowledgment}
+
+The authors thank the faculty of IIIT Vadodara for guidance during this laboratory work. All test images are from the companion website of Gonzalez and Woods \cite{gonzalez}. Complete source code, documentation, and results are publicly available at:
+
+\texttt{https://github.com/vaibhav-123-4/ImageProcessing}
+
+\begin{thebibliography}{9}
+
+\bibitem{gonzalez}
+R. C. Gonzalez and R. E. Woods, \textit{Digital Image Processing}, 4th ed. Pearson, 2018.
+
+\bibitem{jain}
+A. K. Jain, \textit{Fundamentals of Digital Image Processing}. Prentice Hall, 1989.
+
+\bibitem{pizer}
+S. M. Pizer, E. P. Amburn, J. D. Austin et al., ``Adaptive histogram equalization and its variations,'' \textit{Computer Vision, Graphics, and Image Processing}, vol. 39, no. 3, pp. 355--368, 1987.
+
+\bibitem{russ}
+J. C. Russ, \textit{The Image Processing Handbook}, 7th ed. CRC Press, 2016.
+
+\bibitem{numpy}
+C. R. Harris et al., ``Array programming with NumPy,'' \textit{Nature}, vol. 585, pp. 357--362, 2020.
+
+\bibitem{opencv}
+G. Bradski, ``The OpenCV Library,'' \textit{Dr. Dobb's Journal of Software Tools}, 2000.
+
+\end{thebibliography}
+
+\end{document}
